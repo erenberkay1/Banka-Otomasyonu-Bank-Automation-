@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <title>Milli Banka - Müşteri Paneli</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: #f0f2f5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            width: 450px;
+            text-align: center;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .user-info {
+            background: #e8f0fe;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            text-align: left;
+            border: 1px solid #1a73e833;
+            position: relative;
+        }
+
+        .balance-text {
+            font-size: 26px;
+            font-weight: bold;
+            color: #202124;
+        }
+
+        .section {
+            background: #fafafa;
+            border: 1px solid #eee;
+            padding: 15px;
+            border-radius: 12px;
+            margin-bottom: 15px;
+            text-align: left;
+        }
+
+        .label {
+            font-size: 11px;
+            font-weight: bold;
+            color: #1a73e8;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+            display: block;
+        }
+
+        input {
+            display: block;
+            margin: 8px 0;
+            padding: 10px;
+            width: calc(100% - 22px);
+            border: 1px solid #dadce0;
+            border-radius: 8px;
+        }
+
+        button {
+            width: 100%;
+            padding: 11px;
+            margin: 5px 0;
+            cursor: pointer;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+        }
+
+        .btn-primary {
+            background: #1a73e8;
+            color: white;
+        }
+
+        .btn-success {
+            background: #34a853;
+            color: white;
+        }
+
+        .btn-danger {
+            background: #ea4335;
+            color: white;
+        }
+
+        .btn-refresh {
+            background: #fff;
+            color: #1a73e8;
+            border: 1px solid #1a73e8;
+            width: auto;
+            padding: 5px 12px;
+            font-size: 12px;
+            position: absolute;
+            right: 15px;
+            top: 15px;
+            cursor: pointer;
+            border-radius: 6px;
+        }
+
+            .btn-refresh:hover {
+                background: #1a73e8;
+                color: white;
+            }
+
+        #history-table {
+            width: 100%;
+            font-size: 12px;
+            border-collapse: collapse;
+            margin-top: 10px;
+            background: white;
+        }
+
+            #history-table th, #history-table td {
+                padding: 10px;
+                text-align: left;
+                border-bottom: 1px solid #f0f0f0;
+            }
+
+            #history-table th {
+                background: #f8f9fa;
+            }
+    </style>
+</head>
+<body>
+
+    <div id="login-screen" class="container">
+        <h2>🏦 Milli Banka</h2>
+        <input type="text" id="tc" placeholder="TC Kimlik No">
+        <input type="password" id="sifre" placeholder="Şifre">
+        <button class="btn-primary" onclick="login()">Sisteme Giriş Yap</button>
+        <div id="login-error" style="color: red; margin-top: 10px;"></div>
+    </div>
+
+    <div id="main-menu" class="container hidden">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+            <span id="user-name" style="font-weight: bold; color: #1a73e8;">...</span>
+            <button onclick="location.reload()" style="width: auto; padding: 5px 10px; border: 1px solid #ccc;">Güvenli Çıkış</button>
+        </div>
+
+        <div class="user-info">
+            <button class="btn-refresh" onclick="refresh()">🔄 Güncelle</button>
+            <div class="label" style="color: #555;">Mevcut Bakiye</div>
+            <div class="balance-text" id="user-balance">0.00 TL</div>
+        </div>
+
+        <div class="section">
+            <span class="label">ATM İşlemleri</span>
+            <input type="number" id="m_nakit" placeholder="Tutar Girin">
+            <div style="display: flex; gap: 5px;">
+                <button class="btn-success" onclick="islem('para-yatir', 'm_nakit')">Yatır</button>
+                <button class="btn-danger" onclick="islem('para-cek', 'm_nakit')">Çek</button>
+            </div>
+        </div>
+
+        <div class="section" style="border-left: 4px solid #1a73e8;">
+            <span class="label">Para Transferi</span>
+            <input type="text" id="alici" placeholder="Alıcı TC Kimlik No">
+            <input type="number" id="m_transfer" placeholder="Gönderilecek Tutar">
+            <button class="btn-primary" onclick="transfer()">Transferi Gönder</button>
+        </div>
+
+        <div class="section">
+            <span class="label">İşlem Geçmişi</span>
+            <div style="max-height: 200px; overflow-y: auto;">
+                <table id="history-table">
+                    <thead><tr><th>İşlem</th><th>Tutar</th><th>Tarih</th></tr></thead>
+                    <tbody id="history-body"></tbody>
+                </table>
+            </div>
+        </div>
+        <div id="sonuc" style="font-weight: bold; margin-top: 10px; font-size: 14px;"></div>
+    </div>
+
+    <script>
+        const api = "https://localhost:7105/api/Banka";
+        let user = { tc: "", s: "" };
+
+        async function login() {
+            const t = document.getElementById('tc').value;
+            const s = document.getElementById('sifre').value;
+            try {
+                const r = await fetch(`${api}/bakiye-sorgula?tc=${t}&sifre=${s}`);
+                const d = await r.json();
+                if (r.ok) {
+                    user = { tc: t, s: s };
+                    document.getElementById('user-name').innerText = "Hoşgeldin, " + d.mesaj;
+                    document.getElementById('user-balance').innerText = d.mevcutBakiye + " TL";
+                    document.getElementById('login-screen').classList.add('hidden');
+                    document.getElementById('main-menu').classList.remove('hidden');
+                    refresh();
+                } else { document.getElementById('login-error').innerText = "Giriş bilgileri hatalı!"; }
+            } catch (e) { alert("Sunucuya bağlanılamadı!"); }
+        }
+
+        async function refresh() {
+            const r = await fetch(`${api}/bakiye-sorgula?tc=${user.tc}&sifre=${user.s}`);
+            const d = await r.json();
+            if (r.ok) {
+                document.getElementById('user-balance').innerText = d.mevcutBakiye + " TL";
+            }
+
+            const hr = await fetch(`${api}/islem-gecmisi?tc=${user.tc}&sifre=${user.s}`);
+            const hd = await hr.json();
+            const body = document.getElementById('history-body');
+            body.innerHTML = "";
+            hd.forEach(i => {
+                const c = i.miktar > 0 ? "#34a853" : "#ea4335";
+                const isaret = i.miktar > 0 ? "+" : "";
+                body.innerHTML += `<tr><td>${i.tip}</td><td style="color:${c}; font-weight:bold;">${isaret}${i.miktar} TL</td><td>${i.tarih}</td></tr>`;
+            });
+            document.getElementById('sonuc').innerText = "Bilgiler güncellendi.";
+            setTimeout(() => { document.getElementById('sonuc').innerText = ""; }, 2000);
+        }
+
+        async function islem(tip, id) {
+            const m = document.getElementById(id).value;
+            const sonucDiv = document.getElementById('sonuc');
+
+            if (!m || m <= 0) {
+                alert("Geçerli bir miktar girin!");
+                return;
+            }
+
+            try {
+                const r = await fetch(`${api}/${tip}?tc=${user.tc}&sifre=${user.s}&miktar=${m}`, { method: 'POST' });
+                const d = await r.json();
+
+                if (r.ok) {
+                    sonucDiv.innerHTML = `<span style="color:#34a853">✅ ${d.mesaj}</span>`;
+                    document.getElementById(id).value = "";
+                    refresh();
+                } else {
+                    sonucDiv.innerHTML = `<span style="color:#ea4335">❌ ${d.mesaj}</span>`;
+                }
+            } catch (e) {
+                sonucDiv.innerHTML = `<span style="color:#ea4335">❌ Bağlantı hatası!</span>`;
+            }
+        }
+
+        async function transfer() {
+            const a = document.getElementById('alici').value;
+            const m = document.getElementById('m_transfer').value;
+            const sonucDiv = document.getElementById('sonuc');
+
+            if (!a || !m || m <= 0) {
+                alert("Alıcı ve miktar girin!");
+                return;
+            }
+
+            try {
+                const r = await fetch(`${api}/transfer-yap?gonderenTc=${user.tc}&gonderenSifre=${user.s}&aliciTc=${a}&miktar=${m}`, { method: 'POST' });
+                const d = await r.json();
+
+                if (r.ok) {
+                    sonucDiv.innerHTML = `<span style="color:#1a73e8">✅ ${d.mesaj}</span>`;
+                    document.getElementById('alici').value = "";
+                    document.getElementById('m_transfer').value = "";
+                    refresh();
+                } else {
+                    sonucDiv.innerHTML = `<span style="color:#ea4335">❌ ${d.mesaj}</span>`;
+                }
+            } catch (e) {
+                sonucDiv.innerHTML = `<span style="color:#ea4335">❌ Bağlantı hatası!</span>`;
+            }
+        }
+        
+    </script>
+</body>
+</html>
